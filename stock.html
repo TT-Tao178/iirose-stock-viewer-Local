@@ -122,7 +122,7 @@
     let lastPrice = null;
     let crashLogs = [];
     let lastDataLength = 0;
-    let previousStockData = null;
+    let lastNormalData = null;   // 保存最近一次正常（非崩盘）的完整数据，用于崩盘时记录
 
     const themeToggle = document.getElementById('themeToggle');
     const currentPriceSpan = document.getElementById('currentPrice');
@@ -207,17 +207,9 @@
             recentChart.setOption({ title: { text: '暂无数据', left: 'center', top: 'center' } });
             return;
         }
-        // 整体走势配置（带tooltip）
         const fullOption = {
             title: { show: false },
-            tooltip: {
-                trigger: 'axis',
-                formatter: function(params) {
-                    if (!params || params.length === 0) return '';
-                    const point = params[0];
-                    return `时间: ${point.axisValue}<br/>股价: ${point.value.toFixed(4)} 钞`;
-                }
-            },
+            tooltip: { trigger: 'axis', formatter: params => `时间: ${params[0].axisValue}<br/>股价: ${params[0].value.toFixed(4)} 钞` },
             xAxis: { type: 'category', data: times, axisLabel: { rotate: 30, interval: 'auto' } },
             yAxis: { type: 'value', name: '股价 (钞)' },
             series: [{
@@ -231,20 +223,11 @@
             }]
         };
         fullChart.setOption(fullOption, true);
-
-        // 近期波动图配置
         const recentPrices = prices.slice(-20);
         const recentTimes = times.slice(-20);
         const recentOption = {
             title: { show: false },
-            tooltip: {
-                trigger: 'axis',
-                formatter: function(params) {
-                    if (!params || params.length === 0) return '';
-                    const point = params[0];
-                    return `时间: ${point.axisValue}<br/>股价: ${point.value.toFixed(4)} 钞`;
-                }
-            },
+            tooltip: { trigger: 'axis', formatter: params => `时间: ${params[0].axisValue}<br/>股价: ${params[0].value.toFixed(4)} 钞` },
             xAxis: { type: 'category', data: recentTimes, axisLabel: { rotate: 30 } },
             yAxis: { type: 'value', name: '股价 (钞)' },
             series: [{
@@ -270,6 +253,7 @@
             const prices = data.history?.prices || [];
             const times = data.history?.times || [];
 
+            // 更新实时行情
             currentPriceSpan.innerText = current.unitPrice?.toFixed(4) || '--';
             totalStockSpan.innerText = current.totalStock ?? '--';
             totalMoneySpan.innerText = current.totalMoney ?? '--';
@@ -289,17 +273,23 @@
                 changePercentSpan.innerHTML = `<span class="change-down">-${absPct}%</span>`;
             }
 
-            if (current.unitPrice === 1 && lastPrice !== null && lastPrice !== 1 && previousStockData) {
-                addCrashLog(data.lastUpdate, previousStockData);
+            // 崩盘检测：当前股价为1，且上次不是1，且保存了上次正常数据
+            if (current.unitPrice === 1 && lastPrice !== null && lastPrice !== 1 && lastNormalData) {
+                console.log('检测到崩盘，记录崩溃前数据：', lastNormalData);
+                addCrashLog(data.lastUpdate, lastNormalData);
             }
 
-            previousStockData = {
-                totalStock: current.totalStock,
-                totalMoney: current.totalMoney,
-                unitPrice: current.unitPrice
-            };
+            // 更新 lastNormalData：只有当当前股价不等于 1 时才更新（避免崩盘后的重置数据覆盖正常记录）
+            if (current.unitPrice !== 1) {
+                lastNormalData = {
+                    totalStock: current.totalStock,
+                    totalMoney: current.totalMoney,
+                    unitPrice: current.unitPrice
+                };
+            }
             lastPrice = current.unitPrice;
 
+            // 刷新图表和表格
             if (prices.length !== lastDataLength) {
                 renderHistoryTable(prices, times);
                 renderCharts(prices, times);
