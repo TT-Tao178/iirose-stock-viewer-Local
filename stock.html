@@ -1,53 +1,328 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>股票实时看板</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌻 花园股票实时看板</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        body { font-family: sans-serif; padding: 20px; background: #f5f5f5; }
-        #chart { width: 100%; height: 500px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        #info { text-align: center; font-size: 18px; background: white; padding: 12px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        * { margin: 0; padding: 0; box-sizing: border-box; transition: background-color 0.3s ease, color 0.2s ease; }
+        :root {
+            --bg-page: #f0f2f5;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #475569;
+            --border: #e2e8f0;
+            --accent-up: #10b981;
+            --accent-down: #ef4444;
+            --accent-neutral: #6b7280;
+            --log-bg: #f8fafc;
+            --table-header: #f1f5f9;
+            --shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+        }
+        body.dark {
+            --bg-page: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border: #334155;
+            --accent-up: #34d399;
+            --accent-down: #f87171;
+            --accent-neutral: #94a3b8;
+            --log-bg: #0f172a;
+            --table-header: #334155;
+            --shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+        }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background: var(--bg-page); color: var(--text-primary); padding: 20px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+        h1 { font-size: 1.8rem; display: flex; align-items: center; gap: 10px; }
+        .theme-toggle { background: var(--card-bg); border: 1px solid var(--border); border-radius: 40px; padding: 8px 16px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
+        .card { background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow); border: 1px solid var(--border); }
+        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--accent-neutral); padding-left: 12px; }
+        .card-title small { font-size: 0.7rem; font-weight: normal; color: var(--text-secondary); margin-left: 8px; }
+        .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 16px; }
+        .info-item { background: var(--bg-page); padding: 12px 16px; border-radius: 16px; text-align: center; }
+        .info-label { font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); }
+        .info-value { font-size: 1.6rem; font-weight: bold; margin-top: 8px; }
+        .change-up { color: var(--accent-up); }
+        .change-down { color: var(--accent-down); }
+        .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        .chart-box { height: 320px; width: 100%; }
+        .bottom-row { display: grid; grid-template-columns: 1fr 1.5fr; gap: 24px; }
+        .log-window { background: var(--log-bg); border-radius: 16px; padding: 12px; height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.85rem; border: 1px solid var(--border); }
+        .log-entry { padding: 8px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: baseline; }
+        .log-time { font-weight: bold; color: var(--accent-neutral); min-width: 80px; }
+        .crash-icon { color: #f97316; }
+        .history-table-wrapper { height: 300px; overflow-y: auto; border-radius: 16px; border: 1px solid var(--border); }
+        .history-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .history-table th, .history-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
+        .history-table th { background: var(--table-header); position: sticky; top: 0; }
+        .no-data { text-align: center; padding: 40px; color: var(--text-secondary); }
+        footer { text-align: center; margin-top: 32px; font-size: 0.75rem; color: var(--text-secondary); }
+        @media (max-width: 900px) { .charts-row, .bottom-row { grid-template-columns: 1fr; } .info-value { font-size: 1.2rem; } }
     </style>
 </head>
 <body>
-    <h2>📈 实时股价走势图</h2>
-    <div id="chart"></div>
-    <div id="info">⏳ 等待数据...</div>
-    <script>
-        var chart = echarts.init(document.getElementById('chart'));
-        var option = {
-            title: { text: '股价变化曲线', left: 'center' },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: [], name: '时间' },
-            yAxis: { type: 'value', name: '价格 (钞)' },
-            series: [{ type: 'line', data: [], smooth: false, symbol: 'circle', lineStyle: { width: 2, color: '#d87c7c' }, areaStyle: { opacity: 0.1 } }]
-        };
-        chart.setOption(option);
-        var infoDiv = document.getElementById('info');
-        function fetchDataAndUpdate() {
-            fetch('/data')
-                .then(response => response.json())
-                .then(fullData => {
-                    if (fullData && fullData.current) {
-                        infoDiv.innerHTML = `📊 最新股价: ${fullData.current.unitPrice} 钞 | 📈 总股数: ${fullData.current.totalStock} | 💰 盘内总金: ${fullData.current.totalMoney}<br>⏰ 最后更新: ${fullData.lastUpdate}`;
-                    }
-                    if (fullData && fullData.history && fullData.history.prices) {
-                        chart.setOption({
-                            xAxis: { data: fullData.history.times },
-                            series: [{ data: fullData.history.prices }]
-                        });
-                    } else {
-                        infoDiv.innerHTML = "⏳ 暂无数据，请稍后...";
-                    }
-                })
-                .catch(err => {
-                    console.error('读取数据失败:', err);
-                    infoDiv.innerHTML = "⚠️ 无法连接到数据源，请确保机器人已启动且插件运行正常。";
-                });
+<div class="container">
+    <div class="header">
+        <h1><i class="fas fa-chart-line"></i> 花园股票·实时看板</h1>
+        <button class="theme-toggle" id="themeToggle"><i class="fas fa-moon"></i> 深色模式</button>
+    </div>
+
+    <div class="card">
+        <div class="card-title"><i class="fas fa-chart-simple"></i> 实时行情</div>
+        <div class="info-grid">
+            <div class="info-item"><div class="info-label">当前股价</div><div class="info-value" id="currentPrice">--</div></div>
+            <div class="info-item"><div class="info-label">涨跌额</div><div class="info-value" id="changeAmount">--</div></div>
+            <div class="info-item"><div class="info-label">涨跌幅</div><div class="info-value" id="changePercent">--</div></div>
+            <div class="info-item"><div class="info-label">总股数</div><div class="info-value" id="totalStock">--</div></div>
+            <div class="info-item"><div class="info-label">盘内总金</div><div class="info-value" id="totalMoney">--</div></div>
+        </div>
+    </div>
+
+    <div class="charts-row">
+        <div class="card">
+            <div class="card-title">
+                <i class="fas fa-chart-line"></i> 📈 整体走势
+                <small>(最多200条数据)</small>
+            </div>
+            <div id="fullChart" class="chart-box"></div>
+        </div>
+        <div class="card">
+            <div class="card-title">
+                <i class="fas fa-waveform"></i> 🎯 近期波动
+                <small>(最近20笔)</small>
+            </div>
+            <div id="recentChart" class="chart-box"></div>
+        </div>
+    </div>
+
+    <div class="bottom-row">
+        <div class="card">
+            <div class="card-title"><i class="fas fa-bomb"></i> 💥 崩溃日志</div>
+            <div id="logContainer" class="log-window"><div class="no-data">暂无崩溃记录</div></div>
+        </div>
+        <div class="card">
+            <div class="card-title"><i class="fas fa-clock"></i> 📜 逐笔历史记录</div>
+            <div class="history-table-wrapper">
+                <table class="history-table">
+                    <thead><tr><th>时间</th><th>价格(钞)</th><th>涨跌幅</th></tr></thead>
+                    <tbody id="historyTbody"><tr><td colspan="3" class="no-data">等待数据...</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <footer>数据每3秒自动刷新 | 股价变动时增加记录 | 崩盘自动记录崩盘前数据 | 鼠标悬停图表可查看详细数值</footer>
+</div>
+
+<script>
+    let fullChart, recentChart;
+    let lastPrice = null;
+    let crashLogs = [];
+    let lastDataLength = 0;
+    let previousStockData = null;
+
+    const themeToggle = document.getElementById('themeToggle');
+    const currentPriceSpan = document.getElementById('currentPrice');
+    const changeAmountSpan = document.getElementById('changeAmount');
+    const changePercentSpan = document.getElementById('changePercent');
+    const totalStockSpan = document.getElementById('totalStock');
+    const totalMoneySpan = document.getElementById('totalMoney');
+    const logContainer = document.getElementById('logContainer');
+    const historyTbody = document.getElementById('historyTbody');
+
+    function setTheme(theme) {
+        if (theme === 'dark') {
+            document.body.classList.add('dark');
+            localStorage.setItem('stockTheme', 'dark');
+            themeToggle.innerHTML = '<i class="fas fa-sun"></i> 浅色模式';
+        } else {
+            document.body.classList.remove('dark');
+            localStorage.setItem('stockTheme', 'light');
+            themeToggle.innerHTML = '<i class="fas fa-moon"></i> 深色模式';
         }
-        fetchDataAndUpdate();
-        setInterval(fetchDataAndUpdate, 3000);
-    </script>
+        fullChart?.resize();
+        recentChart?.resize();
+    }
+    themeToggle.addEventListener('click', () => {
+        const isDark = document.body.classList.contains('dark');
+        setTheme(isDark ? 'light' : 'dark');
+    });
+    const savedTheme = localStorage.getItem('stockTheme');
+    setTheme(savedTheme === 'dark' ? 'dark' : 'light');
+
+    function formatTime(isoString) {
+        if (!isoString) return '--:--:--';
+        const d = new Date(isoString);
+        return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
+    }
+
+    function addCrashLog(crashTimeISO, preData) {
+        if (!preData) return;
+        const timeStr = formatTime(crashTimeISO);
+        const msg = `💥 股市崩盘！ 崩盘前总股:${preData.totalStock} 崩盘前总金:${preData.totalMoney}`;
+        if (crashLogs.some(log => log.timeStr === timeStr)) return;
+        crashLogs.unshift({ timeStr, msg });
+        if (crashLogs.length > 30) crashLogs.pop();
+        logContainer.innerHTML = crashLogs.length ? crashLogs.map(log => `
+            <div class="log-entry">
+                <span class="log-time">${log.timeStr}</span>
+                <span class="log-msg"><i class="fas fa-skull-crosswalk crash-icon"></i> ${log.msg}</span>
+            </div>
+        `).join('') : '<div class="no-data">暂无崩溃记录</div>';
+    }
+
+    function renderHistoryTable(prices, times) {
+        if (!prices || prices.length === 0) {
+            historyTbody.innerHTML = '<tr><td colspan="3" class="no-data">暂无历史数据</td></tr>';
+            return;
+        }
+        let records = [];
+        for (let i = 0; i < prices.length; i++) {
+            let change = null, arrow = '';
+            if (i > 0 && prices[i-1] !== 0) {
+                const pct = ((prices[i] - prices[i-1]) / prices[i-1]) * 100;
+                change = pct;
+                arrow = pct > 0 ? '↑' : (pct < 0 ? '↓' : '→');
+            }
+            records.push({ time: times[i], price: prices[i], change, arrow });
+        }
+        records.reverse();
+        historyTbody.innerHTML = records.map(r => {
+            let changeHtml = '--';
+            if (r.change !== null) {
+                const absPct = Math.abs(r.change).toFixed(2);
+                const colorClass = r.change > 0 ? 'change-up' : (r.change < 0 ? 'change-down' : '');
+                changeHtml = `<span class="${colorClass}">${r.arrow} ${absPct}%</span>`;
+            }
+            return `<tr><td>${r.time}</td><td>${r.price.toFixed(4)}</td><td>${changeHtml}</td></tr>`;
+        }).join('');
+    }
+
+    function renderCharts(prices, times) {
+        if (!prices || prices.length === 0) {
+            fullChart.setOption({ title: { text: '暂无数据', left: 'center', top: 'center' } });
+            recentChart.setOption({ title: { text: '暂无数据', left: 'center', top: 'center' } });
+            return;
+        }
+        // 整体走势配置（带tooltip）
+        const fullOption = {
+            title: { show: false },
+            tooltip: {
+                trigger: 'axis',
+                formatter: function(params) {
+                    if (!params || params.length === 0) return '';
+                    const point = params[0];
+                    return `时间: ${point.axisValue}<br/>股价: ${point.value.toFixed(4)} 钞`;
+                }
+            },
+            xAxis: { type: 'category', data: times, axisLabel: { rotate: 30, interval: 'auto' } },
+            yAxis: { type: 'value', name: '股价 (钞)' },
+            series: [{
+                data: prices,
+                type: 'line',
+                smooth: false,
+                lineStyle: { width: 2, color: '#d87c7c' },
+                areaStyle: { opacity: 0.2, color: '#d87c7c' },
+                symbol: 'circle',
+                symbolSize: 6
+            }]
+        };
+        fullChart.setOption(fullOption, true);
+
+        // 近期波动图配置
+        const recentPrices = prices.slice(-20);
+        const recentTimes = times.slice(-20);
+        const recentOption = {
+            title: { show: false },
+            tooltip: {
+                trigger: 'axis',
+                formatter: function(params) {
+                    if (!params || params.length === 0) return '';
+                    const point = params[0];
+                    return `时间: ${point.axisValue}<br/>股价: ${point.value.toFixed(4)} 钞`;
+                }
+            },
+            xAxis: { type: 'category', data: recentTimes, axisLabel: { rotate: 30 } },
+            yAxis: { type: 'value', name: '股价 (钞)' },
+            series: [{
+                data: recentPrices,
+                type: 'line',
+                smooth: true,
+                lineStyle: { width: 2, color: '#60a5fa' },
+                areaStyle: { opacity: 0.1, color: '#60a5fa' },
+                symbol: 'diamond',
+                symbolSize: 8
+            }]
+        };
+        recentChart.setOption(recentOption, true);
+    }
+
+    async function fetchData() {
+        try {
+            const response = await fetch('/data');
+            const data = await response.json();
+            if (!data.current) return;
+
+            const current = data.current;
+            const prices = data.history?.prices || [];
+            const times = data.history?.times || [];
+
+            currentPriceSpan.innerText = current.unitPrice?.toFixed(4) || '--';
+            totalStockSpan.innerText = current.totalStock ?? '--';
+            totalMoneySpan.innerText = current.totalMoney ?? '--';
+
+            let changeVal = 0, changePct = 0;
+            if (lastPrice !== null && lastPrice !== current.unitPrice) {
+                changeVal = current.unitPrice - lastPrice;
+                changePct = (changeVal / lastPrice) * 100;
+            }
+            const absVal = Math.abs(changeVal).toFixed(4);
+            const absPct = Math.abs(changePct).toFixed(2);
+            if (changeVal >= 0) {
+                changeAmountSpan.innerHTML = `<span class="change-up">+${absVal} 钞</span>`;
+                changePercentSpan.innerHTML = `<span class="change-up">+${absPct}%</span>`;
+            } else {
+                changeAmountSpan.innerHTML = `<span class="change-down">-${absVal} 钞</span>`;
+                changePercentSpan.innerHTML = `<span class="change-down">-${absPct}%</span>`;
+            }
+
+            if (current.unitPrice === 1 && lastPrice !== null && lastPrice !== 1 && previousStockData) {
+                addCrashLog(data.lastUpdate, previousStockData);
+            }
+
+            previousStockData = {
+                totalStock: current.totalStock,
+                totalMoney: current.totalMoney,
+                unitPrice: current.unitPrice
+            };
+            lastPrice = current.unitPrice;
+
+            if (prices.length !== lastDataLength) {
+                renderHistoryTable(prices, times);
+                renderCharts(prices, times);
+                lastDataLength = prices.length;
+            } else if (prices.length > 0 && lastDataLength === 0) {
+                renderHistoryTable(prices, times);
+                renderCharts(prices, times);
+                lastDataLength = prices.length;
+            }
+        } catch (err) {
+            console.error('获取数据失败:', err);
+        }
+    }
+
+    function init() {
+        fullChart = echarts.init(document.getElementById('fullChart'));
+        recentChart = echarts.init(document.getElementById('recentChart'));
+        fullChart.setOption({ title: { text: '等待数据...', left: 'center', top: 'center' } });
+        recentChart.setOption({ title: { text: '等待数据...', left: 'center', top: 'center' } });
+        fetchData();
+        setInterval(fetchData, 3000);
+    }
+    window.addEventListener('DOMContentLoaded', init);
+</script>
 </body>
 </html>
