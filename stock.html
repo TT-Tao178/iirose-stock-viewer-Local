@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🌻 花园股票实时看板</title>
+    <title>🌻 花园股票看板 + 概率预测</title>
     <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
@@ -20,6 +20,9 @@
             --log-bg: #f8fafc;
             --table-header: #f1f5f9;
             --shadow: 0 10px 15px -3px rgba(0,0,0,0.05);
+            --prob-crash: #f97316;
+            --prob-up: #10b981;
+            --prob-down: #3b82f6;
         }
         body.dark {
             --bg-page: #0f172a;
@@ -40,11 +43,8 @@
         h1 { font-size: 1.8rem; display: flex; align-items: center; gap: 10px; }
         .theme-toggle { background: var(--card-bg); border: 1px solid var(--border); border-radius: 40px; padding: 8px 16px; cursor: pointer; font-size: 1rem; display: flex; align-items: center; gap: 8px; }
         .card { background: var(--card-bg); border-radius: 20px; padding: 20px; margin-bottom: 24px; box-shadow: var(--shadow); border: 1px solid var(--border); }
-        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--accent-neutral); padding-left: 12px; justify-content: space-between; }
-        .card-title-left { display: flex; align-items: center; gap: 10px; }
+        .card-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; border-left: 4px solid var(--accent-neutral); padding-left: 12px; }
         .card-title small { font-size: 0.7rem; font-weight: normal; color: var(--text-secondary); margin-left: 8px; }
-        .export-btn { background: var(--accent-neutral); border: none; border-radius: 20px; padding: 4px 12px; font-size: 0.75rem; cursor: pointer; color: white; transition: 0.2s; }
-        .export-btn:hover { opacity: 0.8; }
         .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 16px; }
         .info-item { background: var(--bg-page); padding: 12px 16px; border-radius: 16px; text-align: center; }
         .info-label { font-size: 0.8rem; text-transform: uppercase; color: var(--text-secondary); }
@@ -63,19 +63,57 @@
         .history-table th, .history-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); }
         .history-table th { background: var(--table-header); position: sticky; top: 0; }
         .no-data { text-align: center; padding: 40px; color: var(--text-secondary); }
+        /* 预测模块样式 */
+        .prob-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .prob-card {
+            flex: 1;
+            background: var(--bg-page);
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+            border-bottom: 4px solid;
+        }
+        .prob-card.crash { border-bottom-color: var(--prob-crash); }
+        .prob-card.up { border-bottom-color: var(--prob-up); }
+        .prob-card.down { border-bottom-color: var(--prob-down); }
+        .prob-value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 8px 0;
+        }
+        .prob-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+        .prob-note {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 12px;
+            text-align: center;
+        }
         footer { text-align: center; margin-top: 32px; font-size: 0.75rem; color: var(--text-secondary); }
-        @media (max-width: 900px) { .charts-row, .bottom-row { grid-template-columns: 1fr; } .info-value { font-size: 1.2rem; } }
+        @media (max-width: 900px) {
+            .charts-row, .bottom-row { grid-template-columns: 1fr; }
+            .info-value { font-size: 1.2rem; }
+            .prob-row { flex-direction: column; }
+        }
     </style>
 </head>
 <body>
 <div class="container">
     <div class="header">
-        <h1><i class="fas fa-chart-line"></i> 花园股票·实时看板</h1>
+        <h1><i class="fas fa-chart-line"></i> 花园股票·看板 + 概率预测</h1>
         <button class="theme-toggle" id="themeToggle"><i class="fas fa-moon"></i> 深色模式</button>
     </div>
 
+    <!-- 实时行情卡片 -->
     <div class="card">
-        <div class="card-title"><div class="card-title-left"><i class="fas fa-chart-simple"></i> 实时行情</div></div>
+        <div class="card-title"><i class="fas fa-chart-simple"></i> 实时行情</div>
         <div class="info-grid">
             <div class="info-item"><div class="info-label">当前股价</div><div class="info-value" id="currentPrice">--</div></div>
             <div class="info-item"><div class="info-label">涨跌额</div><div class="info-value" id="changeAmount">--</div></div>
@@ -85,39 +123,49 @@
         </div>
     </div>
 
+    <!-- 概率预测模块（自动同步当前股价） -->
+    <div class="card">
+        <div class="card-title"><i class="fas fa-chart-line"></i> 📊 价格变动概率预测 <small>(基于历史逐笔数据动态计算)</small></div>
+        <div class="prob-row">
+            <div class="prob-card crash">
+                <div class="prob-label">💥 崩溃概率</div>
+                <div class="prob-value" id="crashProb">--</div>
+                <div class="prob-label">(价格→1.0)</div>
+            </div>
+            <div class="prob-card up">
+                <div class="prob-label">📈 上涨概率</div>
+                <div class="prob-value" id="upProb">--</div>
+                <div class="prob-label">(下一笔更高)</div>
+            </div>
+            <div class="prob-card down">
+                <div class="prob-label">📉 下跌概率</div>
+                <div class="prob-value" id="downProb">--</div>
+                <div class="prob-label">(下一笔更低)</div>
+            </div>
+        </div>
+        <div class="prob-note" id="probNote">等待历史数据...</div>
+    </div>
+
+    <!-- 双图表 -->
     <div class="charts-row">
         <div class="card">
-            <div class="card-title">
-                <div class="card-title-left">
-                    <i class="fas fa-chart-line"></i> 📈 整体走势
-                    <small>(最多200条数据)</small>
-                </div>
-            </div>
+            <div class="card-title"><i class="fas fa-chart-line"></i> 📈 整体走势 <small>(最多200条, 支持滚轮/框选缩放)</small></div>
             <div id="fullChart" class="chart-box"></div>
         </div>
         <div class="card">
-            <div class="card-title">
-                <div class="card-title-left">
-                    <i class="fas fa-waveform"></i> 🎯 近期波动
-                    <small>(最近20笔)</small>
-                </div>
-            </div>
+            <div class="card-title"><i class="fas fa-waveform"></i> 🎯 近期波动 <small>(最近20笔, 支持滚轮缩放)</small></div>
             <div id="recentChart" class="chart-box"></div>
         </div>
     </div>
 
+    <!-- 崩溃日志 + 历史记录 -->
     <div class="bottom-row">
         <div class="card">
-            <div class="card-title"><div class="card-title-left"><i class="fas fa-bomb"></i> 💥 崩溃日志</div></div>
+            <div class="card-title"><i class="fas fa-bomb"></i> 💥 崩溃日志</div>
             <div id="logContainer" class="log-window"><div class="no-data">暂无崩溃记录</div></div>
         </div>
         <div class="card">
-            <div class="card-title">
-                <div class="card-title-left">
-                    <i class="fas fa-clock"></i> 📜 逐笔历史记录
-                </div>
-                <button class="export-btn" id="exportCsvBtn"><i class="fas fa-download"></i> 导出 CSV</button>
-            </div>
+            <div class="card-title"><i class="fas fa-clock"></i> 📜 逐笔历史记录</div>
             <div class="history-table-wrapper">
                 <table class="history-table">
                     <thead><tr><th>时间</th><th>价格(钞)</th><th>涨跌幅</th></tr></thead>
@@ -126,100 +174,26 @@
             </div>
         </div>
     </div>
-    <footer>数据每3秒自动刷新 | 鼠标拖拽/滚轮缩放图表 | 点击导出按钮保存历史记录为 CSV</footer>
+    <footer>数据每3秒自动刷新 | 股价变动时记录 | 概率基于历史变动实时计算 | 鼠标悬停图表显示详情 | 图表支持滚轮缩放/框选</footer>
 </div>
 
 <script>
+    // ----------------------------- 全局变量 -----------------------------
     let fullChart, recentChart;
     let lastPrice = null;
     let crashLogs = [];
     let lastNormalData = null;
-    let currentHistoryPrices = [];
-    let currentHistoryTimes = [];
+    let currentHistoryPrices = [];   // 保存最新的价格序列（用于概率计算）
 
+    // localStorage key
     const STORAGE_CRASH_LOGS = 'stock_crash_logs';
 
-    function loadCrashLogs() {
-        try {
-            const stored = localStorage.getItem(STORAGE_CRASH_LOGS);
-            if (stored) {
-                crashLogs = JSON.parse(stored);
-                if (crashLogs.length > 30) crashLogs = crashLogs.slice(0, 30);
-                updateLogWindow();
-            }
-        } catch (e) { console.error(e); }
-    }
+    // 价格区间定义（左闭右开）
+    const BINS = [0, 0.1, 0.5, 1, 5, 10, 20, 100];
+    const BIN_LABELS = ['0~0.1', '0.1~0.5', '0.5~1', '1~5', '5~10', '10~20', '20~100', '100+'];
+    const ALPHA = 0.5;  // 拉普拉斯平滑系数
 
-    function persistCrashLogs() {
-        try {
-            localStorage.setItem(STORAGE_CRASH_LOGS, JSON.stringify(crashLogs));
-        } catch (e) { console.error(e); }
-    }
-
-    function updateLogWindow() {
-        if (crashLogs.length === 0) {
-            logContainer.innerHTML = '<div class="no-data">暂无崩溃记录</div>';
-            return;
-        }
-        logContainer.innerHTML = crashLogs.map(log => `
-            <div class="log-entry">
-                <span class="log-time">${log.timeStr}</span>
-                <span class="log-msg"><i class="fas fa-skull-crosswalk crash-icon"></i> ${log.msg}</span>
-            </div>
-        `).join('');
-    }
-
-    function addCrashLog(crashTimeISO, preData) {
-        if (!preData) return;
-        const timeStr = formatTime(crashTimeISO);
-        const msg = `💥 股市崩盘！ 崩盘前总股:${preData.totalStock} 崩盘前总金:${preData.totalMoney}`;
-        if (crashLogs.some(log => log.timeStr === timeStr)) return;
-        crashLogs.unshift({ timeStr, msg });
-        if (crashLogs.length > 30) crashLogs.pop();
-        updateLogWindow();
-        persistCrashLogs();
-    }
-
-    // 导出 CSV
-    function exportToCsv() {
-        if (!currentHistoryPrices.length) {
-            alert('暂无历史数据可导出');
-            return;
-        }
-        // 构建正序记录（从旧到新）
-        let records = [];
-        for (let i = 0; i < currentHistoryPrices.length; i++) {
-            let changePercent = '';
-            if (i > 0 && currentHistoryPrices[i-1] !== 0) {
-                const pct = ((currentHistoryPrices[i] - currentHistoryPrices[i-1]) / currentHistoryPrices[i-1]) * 100;
-                changePercent = pct.toFixed(2) + '%';
-            }
-            records.push({
-                time: currentHistoryTimes[i],
-                price: currentHistoryPrices[i].toFixed(4),
-                change: changePercent
-            });
-        }
-        // 转为 CSV 字符串
-        const headers = ['时间', '价格(钞)', '涨跌幅'];
-        const csvRows = [headers.join(',')];
-        for (const rec of records) {
-            csvRows.push(`${rec.time},${rec.price},${rec.change}`);
-        }
-        const csvContent = csvRows.join('\n');
-        const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM 解决中文
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.href = url;
-        link.setAttribute('download', `stock_history_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-    }
-
-    document.getElementById('exportCsvBtn')?.addEventListener('click', exportToCsv);
-
+    // DOM 元素
     const themeToggle = document.getElementById('themeToggle');
     const currentPriceSpan = document.getElementById('currentPrice');
     const changeAmountSpan = document.getElementById('changeAmount');
@@ -228,7 +202,12 @@
     const totalMoneySpan = document.getElementById('totalMoney');
     const logContainer = document.getElementById('logContainer');
     const historyTbody = document.getElementById('historyTbody');
+    const crashProbSpan = document.getElementById('crashProb');
+    const upProbSpan = document.getElementById('upProb');
+    const downProbSpan = document.getElementById('downProb');
+    const probNoteSpan = document.getElementById('probNote');
 
+    // ----------------------------- 主题切换 -----------------------------
     function setTheme(theme) {
         if (theme === 'dark') {
             document.body.classList.add('dark');
@@ -249,12 +228,124 @@
     const savedTheme = localStorage.getItem('stockTheme');
     setTheme(savedTheme === 'dark' ? 'dark' : 'light');
 
+    // ----------------------------- 辅助函数 -----------------------------
     function formatTime(isoString) {
         if (!isoString) return '--:--:--';
         const d = new Date(isoString);
         return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}:${d.getSeconds().toString().padStart(2,'0')}`;
     }
 
+    // 崩溃日志持久化
+    function loadCrashLogs() {
+        try {
+            const stored = localStorage.getItem(STORAGE_CRASH_LOGS);
+            if (stored) {
+                crashLogs = JSON.parse(stored);
+                if (crashLogs.length > 30) crashLogs = crashLogs.slice(0, 30);
+                updateLogWindow();
+            }
+        } catch(e) { console.error(e); }
+    }
+    function persistCrashLogs() {
+        try {
+            localStorage.setItem(STORAGE_CRASH_LOGS, JSON.stringify(crashLogs));
+        } catch(e) { console.error(e); }
+    }
+    function updateLogWindow() {
+        if (crashLogs.length === 0) {
+            logContainer.innerHTML = '<div class="no-data">暂无崩溃记录</div>';
+            return;
+        }
+        logContainer.innerHTML = crashLogs.map(log => `
+            <div class="log-entry">
+                <span class="log-time">${log.timeStr}</span>
+                <span class="log-msg"><i class="fas fa-skull-crosswalk crash-icon"></i> ${log.msg}</span>
+            </div>
+        `).join('');
+    }
+    function addCrashLog(crashTimeISO, preData) {
+        if (!preData) return;
+        const timeStr = formatTime(crashTimeISO);
+        const msg = `💥 股市崩盘！ 崩盘前总股:${preData.totalStock} 崩盘前总金:${preData.totalMoney}`;
+        if (crashLogs.some(log => log.timeStr === timeStr)) return;
+        crashLogs.unshift({ timeStr, msg });
+        if (crashLogs.length > 30) crashLogs.pop();
+        updateLogWindow();
+        persistCrashLogs();
+    }
+
+    // 概率计算：基于历史价格序列（逐笔变动）构建统计
+    function computeProbabilities(priceSequence, currentPrice) {
+        if (!priceSequence || priceSequence.length < 2) {
+            return { crash: 0, up: 0, down: 0, binLabel: '无数据', totalSamples: 0 };
+        }
+        // 初始化每个区间的统计
+        const stats = BINS.map(() => ({ crash: 0, up: 0, down: 0 }));
+        // 遍历相邻变动
+        for (let i = 0; i < priceSequence.length - 1; i++) {
+            const curr = priceSequence[i];
+            const next = priceSequence[i+1];
+            // 确定当前价格所在区间
+            let binIdx = BINS.length - 1;
+            for (let j = 0; j < BINS.length - 1; j++) {
+                if (curr >= BINS[j] && curr < BINS[j+1]) {
+                    binIdx = j;
+                    break;
+                }
+            }
+            // 判断变动类型
+            if (Math.abs(next - 1.0) < 1e-6) {
+                stats[binIdx].crash++;
+            } else if (next > curr) {
+                stats[binIdx].up++;
+            } else if (next < curr) {
+                stats[binIdx].down++;
+            } else {
+                // 相等情况极少，归为下跌（持平不算利好）
+                stats[binIdx].down++;
+            }
+        }
+        // 确定当前价格所在区间
+        let targetBin = BINS.length - 1;
+        for (let j = 0; j < BINS.length - 1; j++) {
+            if (currentPrice >= BINS[j] && currentPrice < BINS[j+1]) {
+                targetBin = j;
+                break;
+            }
+        }
+        const binStats = stats[targetBin];
+        const totalRaw = binStats.crash + binStats.up + binStats.down;
+        // 拉普拉斯平滑
+        const crashSmooth = binStats.crash + ALPHA;
+        const upSmooth = binStats.up + ALPHA;
+        const downSmooth = binStats.down + ALPHA;
+        const totalSmooth = crashSmooth + upSmooth + downSmooth;
+        return {
+            crash: crashSmooth / totalSmooth,
+            up: upSmooth / totalSmooth,
+            down: downSmooth / totalSmooth,
+            binLabel: BIN_LABELS[targetBin],
+            totalSamples: totalRaw
+        };
+    }
+
+    // 更新预测UI（基于当前股价）
+    function updatePrediction(price) {
+        if (!currentHistoryPrices || currentHistoryPrices.length < 2) {
+            crashProbSpan.textContent = '--';
+            upProbSpan.textContent = '--';
+            downProbSpan.textContent = '--';
+            probNoteSpan.textContent = '需要至少2条历史记录才能预测';
+            return;
+        }
+        const prob = computeProbabilities(currentHistoryPrices, price);
+        crashProbSpan.textContent = (prob.crash * 100).toFixed(1) + '%';
+        upProbSpan.textContent = (prob.up * 100).toFixed(1) + '%';
+        downProbSpan.textContent = (prob.down * 100).toFixed(1) + '%';
+        probNoteSpan.textContent = `当前价格区间: ${prob.binLabel} | 样本数: ${prob.totalSamples} (历史逐笔变动)`;
+    }
+
+    // ----------------------------- 表格/图表渲染 -----------------------------
     function renderHistoryTable(prices, times) {
         if (!prices || prices.length === 0) {
             historyTbody.innerHTML = '<tr><td colspan="3" class="no-data">暂无历史数据</td></tr>';
@@ -282,56 +373,68 @@
         }).join('');
     }
 
+    // 通用图表配置（带缩放）
+    function getChartOptions(xAxisData, seriesData, yAxisName = '股价 (钞)') {
+        return {
+            title: { show: false },
+            tooltip: { trigger: 'axis', formatter: params => `时间: ${params[0].axisValue}<br/>股价: ${params[0].value.toFixed(4)} 钞` },
+            xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: 30, interval: 'auto' } },
+            yAxis: { type: 'value', name: yAxisName },
+            dataZoom: [
+                { type: 'inside', start: 0, end: 100 },   // 内置滚轮缩放
+                { type: 'slider', start: 0, end: 100 }     // 滑动条缩放
+            ],
+            series: [{
+                data: seriesData,
+                type: 'line',
+                smooth: false,
+                lineStyle: { width: 2, color: '#d87c7c' },
+                areaStyle: { opacity: 0.2, color: '#d87c7c' },
+                symbol: 'circle',
+                symbolSize: 6
+            }]
+        };
+    }
+
+    function getRecentChartOptions(xAxisData, seriesData, yAxisName = '股价 (钞)') {
+        return {
+            title: { show: false },
+            tooltip: { trigger: 'axis', formatter: params => `时间: ${params[0].axisValue}<br/>股价: ${params[0].value.toFixed(4)} 钞` },
+            xAxis: { type: 'category', data: xAxisData, axisLabel: { rotate: 30 } },
+            yAxis: { type: 'value', name: yAxisName },
+            dataZoom: [
+                { type: 'inside', start: 0, end: 100 },
+                { type: 'slider', start: 0, end: 100 }
+            ],
+            series: [{
+                data: seriesData,
+                type: 'line',
+                smooth: true,
+                lineStyle: { width: 2, color: '#60a5fa' },
+                areaStyle: { opacity: 0.1, color: '#60a5fa' },
+                symbol: 'diamond',
+                symbolSize: 8
+            }]
+        };
+    }
+
     function renderCharts(prices, times) {
         if (!prices || prices.length === 0) {
             fullChart.setOption({ title: { text: '暂无数据', left: 'center', top: 'center' } });
             recentChart.setOption({ title: { text: '暂无数据', left: 'center', top: 'center' } });
             return;
         }
-        // 整体走势图配置（带缩放）
-        const fullOption = {
-            title: { show: false },
-            tooltip: { trigger: 'axis', formatter: params => `时间: ${params[0].axisValue}<br/>股价: ${params[0].value.toFixed(4)} 钞` },
-            toolbox: {
-                feature: {
-                    dataZoom: { yAxisIndex: 'none' },
-                    restore: {},
-                    saveAsImage: {}
-                }
-            },
-            dataZoom: [
-                { type: 'inside', start: 0, end: 100 },
-                { type: 'slider', start: 0, end: 100, bottom: 10 }
-            ],
-            xAxis: { type: 'category', data: times, axisLabel: { rotate: 30, interval: 'auto' } },
-            yAxis: { type: 'value', name: '股价 (钞)' },
-            series: [{ data: prices, type: 'line', smooth: false, lineStyle: { width: 2, color: '#d87c7c' }, areaStyle: { opacity: 0.2, color: '#d87c7c' }, symbol: 'circle', symbolSize: 6 }]
-        };
-        fullChart.setOption(fullOption, true);
-        
+        // 整体走势
+        const fullOpt = getChartOptions(times, prices);
+        fullChart.setOption(fullOpt, true);
+        // 近期波动
         const recentPrices = prices.slice(-20);
         const recentTimes = times.slice(-20);
-        const recentOption = {
-            title: { show: false },
-            tooltip: { trigger: 'axis', formatter: params => `时间: ${params[0].axisValue}<br/>股价: ${params[0].value.toFixed(4)} 钞` },
-            toolbox: {
-                feature: {
-                    dataZoom: { yAxisIndex: 'none' },
-                    restore: {},
-                    saveAsImage: {}
-                }
-            },
-            dataZoom: [
-                { type: 'inside', start: 0, end: 100 },
-                { type: 'slider', start: 0, end: 100, bottom: 10 }
-            ],
-            xAxis: { type: 'category', data: recentTimes, axisLabel: { rotate: 30 } },
-            yAxis: { type: 'value', name: '股价 (钞)' },
-            series: [{ data: recentPrices, type: 'line', smooth: true, lineStyle: { width: 2, color: '#60a5fa' }, areaStyle: { opacity: 0.1, color: '#60a5fa' }, symbol: 'diamond', symbolSize: 8 }]
-        };
-        recentChart.setOption(recentOption, true);
+        const recentOpt = getRecentChartOptions(recentTimes, recentPrices);
+        recentChart.setOption(recentOpt, true);
     }
 
+    // ----------------------------- 数据获取与主循环 -----------------------------
     async function fetchData() {
         try {
             const response = await fetch('/data');
@@ -341,9 +444,11 @@
             const current = data.current;
             const prices = data.history?.prices || [];
             const times = data.history?.times || [];
-            currentHistoryPrices = prices;
-            currentHistoryTimes = times;
 
+            // 更新全局历史价格序列（用于概率计算）
+            currentHistoryPrices = [...prices];
+
+            // 更新实时行情
             currentPriceSpan.innerText = current.unitPrice?.toFixed(4) || '--';
             totalStockSpan.innerText = current.totalStock ?? '--';
             totalMoneySpan.innerText = current.totalMoney ?? '--';
@@ -363,32 +468,33 @@
                 changePercentSpan.innerHTML = `<span class="change-down">-${absPct}%</span>`;
             }
 
+            // 崩盘检测
             if (current.unitPrice === 1 && lastPrice !== null && lastPrice !== 1 && lastNormalData) {
-                console.log('检测到崩盘，记录崩溃前数据：', lastNormalData);
                 addCrashLog(data.lastUpdate, lastNormalData);
             }
-
             if (current.unitPrice !== 1) {
-                lastNormalData = {
-                    totalStock: current.totalStock,
-                    totalMoney: current.totalMoney,
-                    unitPrice: current.unitPrice
-                };
+                lastNormalData = { totalStock: current.totalStock, totalMoney: current.totalMoney, unitPrice: current.unitPrice };
             }
             lastPrice = current.unitPrice;
 
+            // 更新表格和图表（每次都强制更新，确保长时间运行正常）
             renderHistoryTable(prices, times);
             renderCharts(prices, times);
+
+            // 自动更新概率预测（基于当前股价）
+            updatePrediction(current.unitPrice);
         } catch (err) {
             console.error('获取数据失败:', err);
         }
     }
 
+    // ----------------------------- 初始化 -----------------------------
     function init() {
         fullChart = echarts.init(document.getElementById('fullChart'));
         recentChart = echarts.init(document.getElementById('recentChart'));
         fullChart.setOption({ title: { text: '等待数据...', left: 'center', top: 'center' } });
         recentChart.setOption({ title: { text: '等待数据...', left: 'center', top: 'center' } });
+
         loadCrashLogs();
         fetchData();
         setInterval(fetchData, 3000);

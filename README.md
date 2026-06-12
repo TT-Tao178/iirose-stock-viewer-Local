@@ -11,10 +11,14 @@
 - 逐笔历史记录（带涨跌箭头和百分比）
 - 崩溃日志（自动记录股价跌回 1 的时刻）
 - 深色/浅色主题切换（自动保存）
+- 新增概率预测 + 图表UI查看优化
 
 ## 界面展示
-![](https://cdn.jsdelivr.net/gh/TT-Tao178/tt-tao-images/images/1781163821420.png)
-![](https://cdn.jsdelivr.net/gh/TT-Tao178/tt-tao-images/images/1781163896397.png)
+
+![](https://cdn.jsdelivr.net/gh/TT-Tao178/tt-tao-images/images/1781272283222.png)
+
+![](https://cdn.jsdelivr.net/gh/TT-Tao178/tt-tao-images/images/1781271339731230.png)
+
 
 ## 📦 安装与部署
 
